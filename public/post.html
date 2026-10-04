@@ -1,0 +1,229 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>帖子详情 - 二次元讨论社区</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="logo" onclick="location.href='/'">🌸 二次元社区</div>
+  <div style="flex:1"></div>
+  <div class="user-area" id="userArea"></div>
+</nav>
+
+<div class="container">
+  <a class="back-btn" href="/">← 返回首页</a>
+
+  <!-- 帖子详情 -->
+  <div class="post-detail" id="postDetail">
+    <div class="empty-tip">加载中...</div>
+  </div>
+
+  <!-- 评论区 -->
+  <div class="comments-section">
+    <h3>评论</h3>
+    <div id="commentList">
+      <div class="empty-tip">加载中...</div>
+    </div>
+  </div>
+
+  <!-- 评论表单 -->
+  <div class="comment-form" id="commentFormBox">
+    <!-- 动态渲染 -->
+  </div>
+</div>
+
+<div id="flashMsg" class="flash-msg" style="display:none"></div>
+
+<script>
+const $ = id => document.getElementById(id);
+const API = '/api';
+const postId = new URLSearchParams(location.search).get('id');
+
+function showFlash(msg, type = 'success') {
+  const el = $('flashMsg');
+  el.textContent = msg;
+  el.className = 'flash-msg ' + type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 2500);
+}
+
+function getToken() { return localStorage.getItem('token'); }
+function getUsername() { return localStorage.getItem('username'); }
+function clearAuth() { localStorage.removeItem('token'); localStorage.removeItem('username'); }
+
+async function apiFetch(url, options = {}) {
+  const headers = options.headers || {};
+  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken();
+  if (options.body && typeof options.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(options.body);
+  }
+  const res = await fetch(API + url, { ...options, headers });
+  return res.json();
+}
+
+/* ========== 用户区域 ========== */
+function renderUserArea() {
+  const area = $('userArea');
+  if (getToken() && getUsername()) {
+    area.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = '欢迎, ' + getUsername();
+    const btn = document.createElement('button');
+    btn.textContent = '退出登录';
+    btn.onclick = () => { clearAuth(); showFlash('已退出登录'); renderUserArea(); renderCommentForm(); };
+    area.appendChild(span);
+    area.appendChild(btn);
+  } else {
+    area.innerHTML = '';
+    const loginA = document.createElement('a');
+    loginA.href = '/login.html';
+    loginA.textContent = '登录';
+    const regA = document.createElement('a');
+    regA.href = '/register.html';
+    regA.textContent = '注册';
+    area.appendChild(loginA);
+    area.appendChild(regA);
+  }
+}
+
+/* ========== 加载帖子详情 + 评论 ========== */
+async function loadPost() {
+  if (!postId) {
+    $('postDetail').innerHTML = '<div class="empty-tip">帖子不存在</div>';
+    return;
+  }
+  const res = await apiFetch('/posts/' + postId);
+  if (res.code !== 0) {
+    $('postDetail').innerHTML = '<div class="empty-tip">' + res.msg + '</div>';
+    $('commentList').innerHTML = '';
+    return;
+  }
+
+  const { post, comments } = res.data;
+
+  // 渲染帖子详情（使用 textContent 防止 XSS）
+  const detail = $('postDetail');
+  detail.innerHTML = '';
+
+  const h1 = document.createElement('h1');
+  h1.textContent = post.title;
+
+  const meta = document.createElement('div');
+  meta.className = 'meta';
+
+  const tag = document.createElement('span');
+  tag.className = 'board-tag';
+  tag.textContent = post.board;
+
+  const author = document.createElement('span');
+  author.textContent = '发帖人: ' + post.username;
+
+  const time = document.createElement('span');
+  time.textContent = post.created_at;
+
+  meta.appendChild(tag);
+  meta.appendChild(author);
+  meta.appendChild(time);
+
+  const content = document.createElement('div');
+  content.className = 'content';
+  content.textContent = post.content;
+
+  detail.appendChild(h1);
+  detail.appendChild(meta);
+  detail.appendChild(content);
+
+  // 渲染评论
+  const list = $('commentList');
+  list.innerHTML = '';
+  if (!comments.length) {
+    list.innerHTML = '<div class="empty-tip">还没有评论，快来抢沙发吧~</div>';
+  } else {
+    comments.forEach(c => {
+      const item = document.createElement('div');
+      item.className = 'comment-item';
+
+      const header = document.createElement('div');
+      header.className = 'comment-header';
+
+      const u = document.createElement('span');
+      u.textContent = c.username;
+      const t = document.createElement('span');
+      t.textContent = c.created_at;
+
+      header.appendChild(u);
+      header.appendChild(t);
+
+      const body = document.createElement('div');
+      body.className = 'comment-content';
+      body.textContent = c.content;
+
+      item.appendChild(header);
+      item.appendChild(body);
+      list.appendChild(item);
+    });
+  }
+}
+
+/* ========== 评论表单 ========== */
+function renderCommentForm() {
+  const box = $('commentFormBox');
+  box.innerHTML = '';
+
+  if (!getToken()) {
+    const tip = document.createElement('div');
+    tip.className = 'tip';
+    tip.innerHTML = '请先 <a href="/login.html">登录</a> 或 <a href="/register.html">注册</a> 后发表评论';
+    box.appendChild(tip);
+    return;
+  }
+
+  const ta = document.createElement('textarea');
+  ta.id = 'commentContent';
+  ta.placeholder = '写下你的评论...';
+
+  const row = document.createElement('div');
+  row.className = 'btn-row';
+
+  const btn = document.createElement('button');
+  btn.className = 'btn btn-primary';
+  btn.textContent = '发表评论';
+  btn.onclick = submitComment;
+
+  row.appendChild(btn);
+  box.appendChild(ta);
+  box.appendChild(row);
+}
+
+async function submitComment() {
+  const content = $('commentContent').value.trim();
+  if (!content) {
+    showFlash('评论内容不能为空', 'error');
+    return;
+  }
+  const res = await apiFetch('/posts/' + postId + '/comments', {
+    method: 'POST',
+    body: { content }
+  });
+  if (res.code === 0) {
+    showFlash('评论成功');
+    $('commentContent').value = '';
+    loadPost();
+  } else {
+    showFlash(res.msg || '评论失败', 'error');
+  }
+}
+
+/* ========== 初始化 ========== */
+renderUserArea();
+loadPost();
+renderCommentForm();
+</script>
+
+</body>
+</html>

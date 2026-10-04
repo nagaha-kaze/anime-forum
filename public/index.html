@@ -1,0 +1,241 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>二次元讨论社区</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<!-- 顶部导航 -->
+<nav class="navbar">
+  <div class="logo" onclick="location.href='/'">🌸 二次元社区</div>
+
+  <div class="board-tabs">
+    <button class="board-tab active" data-board="">全部</button>
+    <button class="board-tab" data-board="番剧区">番剧区</button>
+    <button class="board-tab" data-board="美图区">美图区</button>
+    <button class="board-tab" data-board="闲聊区">闲聊区</button>
+  </div>
+
+  <div class="search-box">
+    <input type="text" id="searchInput" placeholder="搜索帖子标题...">
+    <button id="searchBtn">搜索</button>
+  </div>
+
+  <div class="user-area" id="userArea">
+    <!-- 动态渲染 -->
+  </div>
+</nav>
+
+<!-- 主体 -->
+<div class="container">
+  <div class="post-list" id="postList">
+    <!-- 动态渲染帖子列表 -->
+    <div class="empty-tip">加载中...</div>
+  </div>
+</div>
+
+<!-- 发帖按钮 -->
+<button class="fab-btn" id="fabBtn" title="发布帖子">+</button>
+
+<!-- 发帖弹窗 -->
+<div class="modal-overlay" id="postModal">
+  <div class="modal">
+    <h3>发布新帖子</h3>
+    <label>板块</label>
+    <select id="postBoard">
+      <option value="番剧区">番剧区</option>
+      <option value="美图区">美图区</option>
+      <option value="闲聊区">闲聊区</option>
+    </select>
+    <label>标题</label>
+    <input type="text" id="postTitle" placeholder="请输入帖子标题（必填）">
+    <label>内容</label>
+    <textarea id="postContent" placeholder="请输入帖子内容（必填）"></textarea>
+    <div class="btn-row">
+      <button class="btn btn-secondary" id="postCancelBtn">取消</button>
+      <button class="btn btn-primary" id="postSubmitBtn">发布</button>
+    </div>
+  </div>
+</div>
+
+<!-- 提示消息 -->
+<div id="flashMsg" class="flash-msg" style="display:none"></div>
+
+<script>
+/* ========== 全局工具 ========== */
+const $ = id => document.getElementById(id);
+const API = '/api';
+
+function showFlash(msg, type = 'success') {
+  const el = $('flashMsg');
+  el.textContent = msg;
+  el.className = 'flash-msg ' + type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 2500);
+}
+
+function getToken() { return localStorage.getItem('token'); }
+function getUsername() { return localStorage.getItem('username'); }
+function clearAuth() { localStorage.removeItem('token'); localStorage.removeItem('username'); }
+
+async function apiFetch(url, options = {}) {
+  const headers = options.headers || {};
+  if (getToken()) headers['Authorization'] = 'Bearer ' + getToken();
+  if (options.body && typeof options.body === 'object') {
+    headers['Content-Type'] = 'application/json';
+    options.body = JSON.stringify(options.body);
+  }
+  const res = await fetch(API + url, { ...options, headers });
+  return res.json();
+}
+
+/* ========== 渲染用户区域 ========== */
+function renderUserArea() {
+  const area = $('userArea');
+  if (getToken() && getUsername()) {
+    area.innerHTML = '';
+    const span = document.createElement('span');
+    span.textContent = '欢迎, ' + getUsername();
+    const btn = document.createElement('button');
+    btn.textContent = '退出登录';
+    btn.onclick = () => { clearAuth(); showFlash('已退出登录'); renderUserArea(); };
+    area.appendChild(span);
+    area.appendChild(btn);
+  } else {
+    area.innerHTML = '';
+    const loginA = document.createElement('a');
+    loginA.href = '/login.html';
+    loginA.textContent = '登录';
+    const regA = document.createElement('a');
+    regA.href = '/register.html';
+    regA.textContent = '注册';
+    area.appendChild(loginA);
+    area.appendChild(regA);
+  }
+}
+
+/* ========== 帖子列表逻辑 ========== */
+let currentBoard = '';
+let currentKeyword = '';
+
+async function loadPosts() {
+  const params = new URLSearchParams();
+  if (currentBoard) params.set('board', currentBoard);
+  if (currentKeyword) params.set('keyword', currentKeyword);
+
+  const res = await apiFetch('/posts?' + params.toString());
+  const list = $('postList');
+
+  if (res.code !== 0) {
+    list.innerHTML = '<div class="empty-tip">加载失败</div>';
+    return;
+  }
+
+  const posts = res.data;
+  if (!posts.length) {
+    list.innerHTML = '<div class="empty-tip">还没有帖子，快来发第一条吧~</div>';
+    return;
+  }
+
+  list.innerHTML = '';
+  posts.forEach(p => {
+    const item = document.createElement('div');
+    item.className = 'post-item';
+    item.onclick = () => location.href = '/post.html?id=' + p.id;
+
+    const title = document.createElement('div');
+    title.className = 'post-title';
+    title.textContent = p.title;
+
+    const meta = document.createElement('div');
+    meta.className = 'post-meta';
+
+    const tag = document.createElement('span');
+    tag.className = 'board-tag';
+    tag.textContent = p.board;
+
+    const author = document.createElement('span');
+    author.textContent = p.username;
+
+    const time = document.createElement('span');
+    time.textContent = p.created_at;
+
+    meta.appendChild(tag);
+    meta.appendChild(author);
+    meta.appendChild(time);
+
+    item.appendChild(title);
+    item.appendChild(meta);
+    list.appendChild(item);
+  });
+}
+
+/* ========== 板块切换 ========== */
+document.querySelectorAll('.board-tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.board-tab').forEach(t => t.classList.remove('active'));
+    tab.classList.add('active');
+    currentBoard = tab.dataset.board;
+    loadPosts();
+  });
+});
+
+/* ========== 搜索 ========== */
+$('searchBtn').addEventListener('click', () => {
+  currentKeyword = $('searchInput').value.trim();
+  loadPosts();
+});
+$('searchInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') $('searchBtn').click();
+});
+
+/* ========== 发帖弹窗 ========== */
+const modal = $('postModal');
+$('fabBtn').addEventListener('click', () => {
+  if (!getToken()) {
+    showFlash('请先登录再发帖', 'error');
+    setTimeout(() => location.href = '/login.html', 800);
+    return;
+  }
+  $('postTitle').value = '';
+  $('postContent').value = '';
+  modal.classList.add('show');
+});
+$('postCancelBtn').addEventListener('click', () => modal.classList.remove('show'));
+
+$('postSubmitBtn').addEventListener('click', async () => {
+  const title = $('postTitle').value.trim();
+  const content = $('postContent').value.trim();
+  const board = $('postBoard').value;
+  if (!title || !content) {
+    showFlash('标题和内容不能为空', 'error');
+    return;
+  }
+  const res = await apiFetch('/posts', {
+    method: 'POST',
+    body: { title, content, board }
+  });
+  if (res.code === 0) {
+    showFlash('发帖成功');
+    modal.classList.remove('show');
+    loadPosts();
+  } else {
+    showFlash(res.msg || '发帖失败', 'error');
+  }
+});
+
+// 点击遮罩关闭弹窗
+modal.addEventListener('click', e => {
+  if (e.target === modal) modal.classList.remove('show');
+});
+
+/* ========== 初始化 ========== */
+renderUserArea();
+loadPosts();
+</script>
+
+</body>
+</html>

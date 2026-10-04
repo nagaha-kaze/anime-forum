@@ -1,0 +1,100 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>注册 - 二次元讨论社区</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div class="auth-page">
+  <div class="auth-box">
+    <h2>🌸 注册</h2>
+
+    <div class="form-item">
+      <label>用户名</label>
+      <input type="text" id="username" placeholder="2-20 个字符">
+    </div>
+    <div class="form-item">
+      <label>密码</label>
+      <input type="password" id="password" placeholder="至少 6 位">
+    </div>
+    <div class="form-item">
+      <label>确认密码</label>
+      <input type="password" id="password2" placeholder="再次输入密码">
+    </div>
+    <div class="form-item">
+      <label>邀请码</label>
+      <input type="text" id="inviteCode" placeholder="请输入邀请码">
+    </div>
+
+    <button class="btn btn-primary" id="registerBtn">注 册</button>
+
+    <div class="switch-link">
+      已有账号？<a href="/login.html">去登录</a>
+    </div>
+  </div>
+</div>
+
+<div id="flashMsg" class="flash-msg" style="display:none"></div>
+
+<script>
+function showFlash(msg, type = 'success') {
+  const el = document.getElementById('flashMsg');
+  el.textContent = msg;
+  el.className = 'flash-msg ' + type;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 2500);
+}
+
+document.getElementById('registerBtn').addEventListener('click', async () => {
+  const username = document.getElementById('username').value.trim();
+  const password = document.getElementById('password').value;
+  const password2 = document.getElementById('password2').value;
+  const inviteCode = document.getElementById('inviteCode').value.trim();
+
+  // 前端基础校验
+  if (!username || !password || !password2 || !inviteCode) {
+    showFlash('所有字段不能为空', 'error');
+    return;
+  }
+  if (username.length < 2 || username.length > 20) {
+    showFlash('用户名长度需在 2-20 之间', 'error');
+    return;
+  }
+  if (password.length < 6) {
+    showFlash('密码至少 6 位', 'error');
+    return;
+  }
+  if (password !== password2) {
+    showFlash('两次输入的密码不一致', 'error');
+    return;
+  }
+
+  try {
+    const res = await fetch('/api/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password, inviteCode })
+    });
+    const data = await res.json();
+
+    if (data.code === 0) {
+      showFlash('注册成功，正在跳转到登录页...');
+      setTimeout(() => { location.href = '/login.html'; }, 1000);
+    } else {
+      showFlash(data.msg || '注册失败', 'error');
+    }
+  } catch (e) {
+    showFlash('网络错误，请稍后重试', 'error');
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('registerBtn').click();
+});
+</script>
+
+</body>
+</html>
